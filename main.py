@@ -71,7 +71,7 @@ system_prompt = """
 You extract concrete content warnings from IMDb parental guide text.
 
 RULES:
-- Only extract things that physically happen or are spoken.
+- Extract concrete physical actions. Include SEXUAL ACTS, KISSING, NUDITY, BREAST NUDITY, PUBIC HAIR, EXPLICIT TOUCH, BLOOD, INJURIES. 
 - Do NOT include themes, character names, emotions, or story topics.
 - Keywords must be 1-3 words.
 - Use ALL CAPS.
