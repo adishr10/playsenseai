@@ -1,4 +1,5 @@
 import json
+import os
 import requests
 import time
 import re
@@ -8,7 +9,7 @@ from supabase import create_client
 
 TMDB_API_KEY = "0cc553ab80b66eb0e1be73756f6ec11d"
 GROQ_API_KEY = "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"
-
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 SUPABASE_URL = "https://etydbhaqznqfobltkopd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0eWRiaGFxem5xZm9ibHRrb3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODgyNjUsImV4cCI6MjA4OTE2NDI2NX0.T0T4OBcN7tShEvaNj5Tf294W1QTHA_FTxwvbQWqRULw"
 
