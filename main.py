@@ -74,12 +74,11 @@ RULES:
 - Extract ALL distinct items that are physically shown, spoken, or clearly described.
 
 - This includes:
-  • SEXUAL CONTENT
+  • SEXUAL CONTENT (KISSING, BREAST NUDITY, SEX, MASTURBATION, NUDE BUTTOCKS, FULL FRONTAL NUDITY, GENITALS,  MOANING, SEXUAL SOUNDS, MAKING OUT, PORNOGRAPHY)
   • VIOLENCE
-  • LANGUAGE (each swear word separately)
-  • GESTURES
+  • LANGUAGE (FUCK, SHIT, BITCH etc.)
+  • GESTURES 
   • SUBSTANCE USE
-  • GENERAL TAGS (if explicitly stated)
 
 - DO NOT group (DO NOT say F-BOMBS, list FUCK instead).
 - Each keyword must be 1–3 words max.
@@ -149,6 +148,24 @@ def scrape_parental_guide(html):
     return "\n".join(texts)
 
 
+# ✅ NEW: chunking to avoid token limit
+def chunk_text(text, max_chars=4000):
+    chunks = []
+    current = ""
+
+    for line in text.split("\n"):
+        if len(current) + len(line) < max_chars:
+            current += line + "\n"
+        else:
+            chunks.append(current)
+            current = line + "\n"
+
+    if current:
+        chunks.append(current)
+
+    return chunks
+
+
 def analyze_movie(movie_name):
     imdb_id = get_imdb_id(movie_name)
 
@@ -165,14 +182,27 @@ def analyze_movie(movie_name):
 
     print("scraped chars:", len(scraped_text))
 
-    result_ai = extract_keywords(scraped_text)
+    # ✅ NEW: process in chunks
+    chunks = chunk_text(scraped_text)
+
+    final = {
+        "Visual": [],
+        "Substance": [],
+        "Words": []
+    }
+
+    for chunk in chunks:
+        res = extract_keywords(chunk)
+
+        for key in final:
+            final[key].extend(res.get(key, []))
+
+    # ✅ remove duplicates
+    for key in final:
+        final[key] = list(set(final[key]))
 
     result = {
-        "categories": {
-            "Visual": result_ai.get("Visual", []),
-            "Substance": result_ai.get("Substance", []),
-            "Words": result_ai.get("Words", [])
-        }
+        "categories": final
     }
 
     supabase.table("movies").insert({
