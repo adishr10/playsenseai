@@ -123,15 +123,34 @@ def extract_keywords(text):
         ]
     )
 
-    output = response.choices[0].message.content
+    output = response.choices[0].message.content.strip()
 
+    print("\n--- RAW LLM OUTPUT ---\n", output)
+
+    # 🔹 remove markdown code blocks if present
+    if output.startswith("```"):
+        output = re.sub(r"```(json)?", "", output).strip()
+
+    # 🔹 try direct parse first
     try:
         return json.loads(output)
 
-    except:
-        match = re.search(r"\{.*\}", output, re.DOTALL)
-        if match:
-            return json.loads(match.group())
+    except Exception as e:
+        print("Direct JSON parse failed:", e)
+
+    # 🔹 extract JSON safely (non-greedy)
+    match = re.search(r"\{[\s\S]*?\}", output)
+
+    if match:
+        raw = match.group()
+        print("\n--- EXTRACTED JSON ---\n", raw)
+
+        try:
+            return json.loads(raw)
+        except Exception as e:
+            print("Extracted JSON failed:", e)
+
+    print("⚠️ FINAL FALLBACK USED")
 
     return {"Visual": [], "Substance": [], "Words": []}
 
