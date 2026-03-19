@@ -8,7 +8,6 @@ from groq import Groq
 from supabase import create_client
 
 TMDB_API_KEY = "0cc553ab80b66eb0e1be73756f6ec11d"
-GROQ_API_KEY = "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"
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 SUPABASE_URL = "https://etydbhaqznqfobltkopd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0eWRiaGFxem5xZm9ibHRrb3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODgyNjUsImV4cCI6MjA4OTE2NDI2NX0.T0T4OBcN7tShEvaNj5Tf294W1QTHA_FTxwvbQWqRULw"
@@ -25,6 +24,7 @@ SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 
 
 def get_with_retry(url, params=None, retries=5):
+
     for i in range(retries):
         try:
             r = session.get(url, params=params, headers=headers, timeout=15)
@@ -41,6 +41,7 @@ def get_with_retry(url, params=None, retries=5):
 
 
 def get_imdb_id(movie_name):
+
     search = get_with_retry(
         SEARCH_URL,
         {"api_key": TMDB_API_KEY, "query": movie_name}
@@ -60,59 +61,32 @@ def get_imdb_id(movie_name):
 
 
 def get_imdb_page(imdb_id):
+
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
+
     return get_with_retry(url)
 
 
 system_prompt = """
-You extract ALL explicit, concrete content warnings from IMDb parental guide text.
-
-GOAL:
-Maximize recall. Extract EVERYTHING mentioned. Do NOT summarize.
+You extract concrete content warnings from IMDb parental guide text.
 
 RULES:
-- Extract ALL distinct items that are physically shown, spoken, or clearly described.
-
-- This includes:
-  • SEXUAL CONTENT (KISSING, BREAST NUDITY, SEX, MASTURBATION, NUDE BUTTOCKS, FULL FRONTAL NUDITY, GENITALS,  MOANING, SEXUAL SOUNDS, MAKING OUT, PORNOGRAPHY)
-  • VIOLENCE
-  • LANGUAGE (FUCK, SHIT, BITCH etc.)
-  • GESTURES 
-  • SUBSTANCE USE
-
-- DO NOT group (DO NOT say F-BOMBS, list FUCK instead).
-- Each keyword must be 1–3 words max.
+- Extract concrete physical actions. Include SEXUAL ACTS, KISSING, NUDITY, BREAST NUDITY, PUBIC HAIR, EXPLICIT TOUCH, BLOOD, INJURIES. 
+- Do NOT include themes, character names, emotions, or story topics.
+- Keywords must be 1-3 words.
 - Use ALL CAPS.
-- Be literal and specific.
-
-- If counts are mentioned → include them (e.g., FUCK (569 USES)).
-
-- DO NOT include:
-  • themes
-  • emotions
-  • character names
-
-FINAL STEP:
-Classify into:
-- Visual (sex, nudity, violence, gestures)
-- Substance (drugs, alcohol, smoking)
-- Words (profanity, insults)
-
-OUTPUT:
-Return ONLY valid JSON.
+- Be specific (examples: KISSING, BREAST NUDITY, BLOODLESS EXPLOSION, WINE DRINKING, F-BOMBS).
+- Return ONLY valid JSON.
 
 FORMAT:
-{
-  "Visual": [],
-  "Substance": [],
-  "Words": []
-}
+{"keywords":[]}
 """
 
 
 def extract_keywords(text):
+
     if not text.strip():
-        return {"Visual": [], "Substance": [], "Words": []}
+        return {"keywords": []}
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -123,69 +97,63 @@ def extract_keywords(text):
         ]
     )
 
-    output = response.choices[0].message.content.strip()
+    output = response.choices[0].message.content
 
-    print("\n--- RAW LLM OUTPUT ---\n", output)
-
-    # 🔹 remove markdown code blocks if present
-    if output.startswith("```"):
-        output = re.sub(r"```(json)?", "", output).strip()
-
-    # 🔹 try direct parse first
     try:
         return json.loads(output)
 
-    except Exception as e:
-        print("Direct JSON parse failed:", e)
+    except:
+        match = re.search(r"\{.*\}", output, re.DOTALL)
 
-    # 🔹 extract JSON safely (non-greedy)
-    match = re.search(r"\{[\s\S]*?\}", output)
+        if match:
+            return json.loads(match.group())
 
-    if match:
-        raw = match.group()
-        print("\n--- EXTRACTED JSON ---\n", raw)
-
-        try:
-            return json.loads(raw)
-        except Exception as e:
-            print("Extracted JSON failed:", e)
-
-    print("⚠️ FINAL FALLBACK USED")
-
-    return {"Visual": [], "Substance": [], "Words": []}
+    return {"keywords": []}
 
 
 def scrape_parental_guide(html):
+
     soup = bs(html, "html.parser")
 
-    texts = []
-    for div in soup.find_all(["div", "li"]):
-        t = div.get_text(strip=True)
-        if t:
-            texts.append(t)
+    text_blocks = soup.find_all("div", class_="ipc-html-content-inner-div")
 
-    return "\n".join(texts)
+    collected = [b.get_text(strip=True) for b in text_blocks]
+
+    full_text = "\n".join(collected)
+
+    return full_text
 
 
-# ✅ NEW: chunking to avoid token limit
-def chunk_text(text, max_chars=4000):
-    chunks = []
-    current = ""
+def split_categories(text):
+
+    visual = []
+    substance = []
+    words = []
 
     for line in text.split("\n"):
-        if len(current) + len(line) < max_chars:
-            current += line + "\n"
-        else:
-            chunks.append(current)
-            current = line + "\n"
 
-    if current:
-        chunks.append(current)
+        l = line.lower()
 
-    return chunks
+        if any(x in l for x in [
+            "sex", "nudity", "violence", "blood", "fight", "kill", "frightening"
+        ]):
+            visual.append(line)
+
+        elif any(x in l for x in [
+            "drink", "alcohol", "smoke", "cigarette", "drug"
+        ]):
+            substance.append(line)
+
+        elif any(x in l for x in [
+            "fuck", "shit", "bitch", "asshole"
+        ]):
+            words.append(line)
+
+    return "\n".join(visual), "\n".join(substance), "\n".join(words)
 
 
 def analyze_movie(movie_name):
+
     imdb_id = get_imdb_id(movie_name)
 
     cached = supabase.table("movies").select("*").eq("imdb_id", imdb_id).execute()
@@ -197,31 +165,27 @@ def analyze_movie(movie_name):
     print("Processing:", imdb_id)
 
     html = get_imdb_page(imdb_id)
+
     scraped_text = scrape_parental_guide(html)
 
     print("scraped chars:", len(scraped_text))
 
-    # ✅ NEW: process in chunks
-    chunks = chunk_text(scraped_text)
+    visual_text, substance_text, words_text = split_categories(scraped_text)
 
-    final = {
-        "Visual": [],
-        "Substance": [],
-        "Words": []
-    }
+    print("visual:", len(visual_text))
+    print("substance:", len(substance_text))
+    print("words:", len(words_text))
 
-    for chunk in chunks:
-        res = extract_keywords(chunk)
-
-        for key in final:
-            final[key].extend(res.get(key, []))
-
-    # ✅ remove duplicates
-    for key in final:
-        final[key] = list(set(final[key]))
+    visual = extract_keywords(visual_text)
+    substance = extract_keywords(substance_text)
+    words = extract_keywords(words_text)
 
     result = {
-        "categories": final
+        "categories": {
+            "Visual": visual["keywords"],
+            "Substance": substance["keywords"],
+            "Words": words["keywords"]
+        }
     }
 
     supabase.table("movies").insert({
@@ -235,5 +199,7 @@ def analyze_movie(movie_name):
 
 
 if __name__ == "__main__":
+
     movie = input("Enter movie name: ")
+
     print(analyze_movie(movie))
