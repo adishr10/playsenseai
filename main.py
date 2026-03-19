@@ -25,7 +25,6 @@ SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 
 
 def get_with_retry(url, params=None, retries=5):
-
     for i in range(retries):
         try:
             r = session.get(url, params=params, headers=headers, timeout=15)
@@ -42,7 +41,6 @@ def get_with_retry(url, params=None, retries=5):
 
 
 def get_imdb_id(movie_name):
-
     search = get_with_retry(
         SEARCH_URL,
         {"api_key": TMDB_API_KEY, "query": movie_name}
@@ -62,32 +60,60 @@ def get_imdb_id(movie_name):
 
 
 def get_imdb_page(imdb_id):
-
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-
     return get_with_retry(url)
 
 
 system_prompt = """
-You extract concrete content warnings from IMDb parental guide text.
+You extract ALL explicit, concrete content warnings from IMDb parental guide text.
+
+GOAL:
+Maximize recall. Extract EVERYTHING mentioned. Do NOT summarize.
 
 RULES:
-- Extract concrete physical actions. Include SEXUAL ACTS, KISSING, NUDITY, BREAST NUDITY, PUBIC HAIR, EXPLICIT TOUCH, BLOOD, INJURIES. 
-- Do NOT include themes, character names, emotions, or story topics.
-- Keywords must be 1-3 words.
+- Extract ALL distinct items that are physically shown, spoken, or clearly described.
+
+- This includes:
+  • SEXUAL CONTENT
+  • VIOLENCE
+  • LANGUAGE (each swear word separately)
+  • GESTURES
+  • SUBSTANCE USE
+  • GENERAL TAGS (if explicitly stated)
+
+- DO NOT group (DO NOT say F-BOMBS, list FUCK instead).
+- Each keyword must be 1–3 words max.
 - Use ALL CAPS.
-- Be specific (examples: KISSING, BREAST NUDITY, BLOODLESS EXPLOSION, WINE DRINKING, F-BOMBS).
-- Return ONLY valid JSON.
+- Be literal and specific.
+
+- If counts are mentioned → include them (e.g., FUCK (569 USES)).
+
+- DO NOT include:
+  • themes
+  • emotions
+  • character names
+
+FINAL STEP:
+Classify into:
+- Visual (sex, nudity, violence, gestures)
+- Substance (drugs, alcohol, smoking)
+- Words (profanity, insults)
+
+OUTPUT:
+Return ONLY valid JSON.
 
 FORMAT:
-{"keywords":[]}
+{
+  "Visual": [],
+  "Substance": [],
+  "Words": []
+}
 """
 
 
 def extract_keywords(text):
-
     if not text.strip():
-        return {"keywords": []}
+        return {"Visual": [], "Substance": [], "Words": []}
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -105,56 +131,25 @@ def extract_keywords(text):
 
     except:
         match = re.search(r"\{.*\}", output, re.DOTALL)
-
         if match:
             return json.loads(match.group())
 
-    return {"keywords": []}
+    return {"Visual": [], "Substance": [], "Words": []}
 
 
 def scrape_parental_guide(html):
-
     soup = bs(html, "html.parser")
 
-    text_blocks = soup.find_all("div", class_="ipc-html-content-inner-div")
+    texts = []
+    for div in soup.find_all(["div", "li"]):
+        t = div.get_text(strip=True)
+        if t:
+            texts.append(t)
 
-    collected = [b.get_text(strip=True) for b in text_blocks]
-
-    full_text = "\n".join(collected)
-
-    return full_text
-
-
-def split_categories(text):
-
-    visual = []
-    substance = []
-    words = []
-
-    for line in text.split("\n"):
-
-        l = line.lower()
-
-        if any(x in l for x in [
-            "sex", "nudity", "violence", "blood", "fight", "kill", "frightening"
-        ]):
-            visual.append(line)
-
-        elif any(x in l for x in [
-            "drink", "alcohol", "smoke", "cigarette", "drug"
-        ]):
-            substance.append(line)
-
-        elif any(x in l for x in [
-            "fuck", "shit", "bitch", "asshole"
-        ]):
-            words.append(line)
-
-    return "\n".join(visual), "\n".join(substance), "\n".join(words)
+    return "\n".join(texts)
 
 
 def analyze_movie(movie_name):
-
     imdb_id = get_imdb_id(movie_name)
 
     cached = supabase.table("movies").select("*").eq("imdb_id", imdb_id).execute()
@@ -166,26 +161,17 @@ def analyze_movie(movie_name):
     print("Processing:", imdb_id)
 
     html = get_imdb_page(imdb_id)
-
     scraped_text = scrape_parental_guide(html)
 
     print("scraped chars:", len(scraped_text))
 
-    visual_text, substance_text, words_text = split_categories(scraped_text)
-
-    print("visual:", len(visual_text))
-    print("substance:", len(substance_text))
-    print("words:", len(words_text))
-
-    visual = extract_keywords(visual_text)
-    substance = extract_keywords(substance_text)
-    words = extract_keywords(words_text)
+    result_ai = extract_keywords(scraped_text)
 
     result = {
         "categories": {
-            "Visual": visual["keywords"],
-            "Substance": substance["keywords"],
-            "Words": words["keywords"]
+            "Visual": result_ai.get("Visual", []),
+            "Substance": result_ai.get("Substance", []),
+            "Words": result_ai.get("Words", [])
         }
     }
 
@@ -200,7 +186,5 @@ def analyze_movie(movie_name):
 
 
 if __name__ == "__main__":
-
     movie = input("Enter movie name: ")
-
     print(analyze_movie(movie))
