@@ -18,13 +18,16 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 session = requests.Session()
 
-headers = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
+headers = {
+    'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X)'
+}
 
 SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 
 
-def get_with_retry(url, params=None, retries=5):
+# ---------------- FETCH ---------------- #
 
+def get_with_retry(url, params=None, retries=5):
     for i in range(retries):
         try:
             r = session.get(url, params=params, headers=headers, timeout=15)
@@ -41,7 +44,6 @@ def get_with_retry(url, params=None, retries=5):
 
 
 def get_imdb_id(movie_name):
-
     search = get_with_retry(
         SEARCH_URL,
         {"api_key": TMDB_API_KEY, "query": movie_name}
@@ -61,30 +63,39 @@ def get_imdb_id(movie_name):
 
 
 def get_imdb_page(imdb_id):
-
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-
     return get_with_retry(url)
 
 
+# ---------------- PROMPT ---------------- #
+
 system_prompt = """
-You extract concrete content warnings from IMDb parental guide text.
+You extract important content warnings from IMDb parental guide text.
+
+GOAL:
+Return only the most relevant and useful warnings.
 
 RULES:
-- Extract concrete physical actions. Include SEXUAL ACTS, KISSING, NUDITY, BREAST NUDITY, PUBIC HAIR, EXPLICIT TOUCH, BLOOD, INJURIES. 
-- Do NOT include themes, character names, emotions, or story topics.
-- Keywords must be 1-3 words.
-- Use ALL CAPS.
-- Be specific (examples: KISSING, BREAST NUDITY, BLOODLESS EXPLOSION, WINE DRINKING, F-BOMBS).
-- Return ONLY valid JSON.
+- ALWAYS include sexual content if present (sex, kissing, nudity, breasts, body exposure).
+- Extract strong visual content (violence, blood, death, weapons).
+- Extract substance use (drugs, alcohol, smoking).
+- Extract strong language (fuck, shit, etc).
 
-FORMAT:
+- IGNORE weak or irrelevant items (cars, furniture, walking, etc).
+- Merge similar items (KILLING, KILLED → KILL).
+- Keywords must be 1–3 words, ALL CAPS.
+
+LIMIT:
+- Max 12 keywords.
+
+OUTPUT:
 {"keywords":[]}
 """
 
 
-def extract_keywords(text):
+# ---------------- AI ---------------- #
 
+def extract_keywords(text):
     if not text.strip():
         return {"keywords": []}
 
@@ -101,46 +112,41 @@ def extract_keywords(text):
 
     try:
         return json.loads(output)
-
     except:
         match = re.search(r"\{.*\}", output, re.DOTALL)
-
         if match:
             return json.loads(match.group())
 
     return {"keywords": []}
 
 
-def scrape_parental_guide(html):
+# ---------------- SCRAPE ---------------- #
 
+def scrape_parental_guide(html):
     soup = bs(html, "html.parser")
 
     text_blocks = soup.find_all("div", class_="ipc-html-content-inner-div")
 
     collected = [b.get_text(strip=True) for b in text_blocks]
 
-    full_text = "\n".join(collected)
+    return "\n".join(collected)
 
-    return full_text
 
+# ---------------- SPLIT ---------------- #
 
 def split_categories(text):
-
-    visual = []
-    substance = []
-    words = []
+    visual, substance, words = [], [], []
 
     for line in text.split("\n"):
-
         l = line.lower()
 
         if any(x in l for x in [
-            "sex", "nudity", "violence", "blood", "fight", "kill", "frightening"
+            "sex", "nudity", "violence", "blood", "kill", "fight"
         ]):
             visual.append(line)
 
         elif any(x in l for x in [
-            "drink", "alcohol", "smoke", "cigarette", "drug"
+            "drink", "alcohol", "smoke", "drug"
         ]):
             substance.append(line)
 
@@ -152,8 +158,32 @@ def split_categories(text):
     return "\n".join(visual), "\n".join(substance), "\n".join(words)
 
 
-def analyze_movie(movie_name):
+# ---------------- SMART LIMIT ---------------- #
 
+PRIORITY = [
+    "SEX", "KISSING", "NUDITY", "BREAST", "BUTTOCKS",
+    "PUBIC", "SEXUAL"
+]
+
+
+def smart_limit(keywords, max_items=12):
+    keywords = list(dict.fromkeys(keywords))
+
+    priority_items = []
+    others = []
+
+    for k in keywords:
+        if any(p in k for p in PRIORITY):
+            priority_items.append(k)
+        else:
+            others.append(k)
+
+    return (priority_items + others)[:max_items]
+
+
+# ---------------- MAIN ---------------- #
+
+def analyze_movie(movie_name):
     imdb_id = get_imdb_id(movie_name)
 
     cached = supabase.table("movies").select("*").eq("imdb_id", imdb_id).execute()
@@ -165,16 +195,13 @@ def analyze_movie(movie_name):
     print("Processing:", imdb_id)
 
     html = get_imdb_page(imdb_id)
-
     scraped_text = scrape_parental_guide(html)
 
-    print("scraped chars:", len(scraped_text))
+    # 🔥 reduce tokens
+    if len(scraped_text) > 12000:
+        scraped_text = scraped_text[:12000]
 
     visual_text, substance_text, words_text = split_categories(scraped_text)
-
-    print("visual:", len(visual_text))
-    print("substance:", len(substance_text))
-    print("words:", len(words_text))
 
     visual = extract_keywords(visual_text)
     substance = extract_keywords(substance_text)
@@ -182,9 +209,9 @@ def analyze_movie(movie_name):
 
     result = {
         "categories": {
-            "Visual": visual["keywords"],
-            "Substance": substance["keywords"],
-            "Words": words["keywords"]
+            "Visual": smart_limit(visual["keywords"]),
+            "Substance": smart_limit(substance["keywords"]),
+            "Words": smart_limit(words["keywords"])
         }
     }
 
@@ -199,7 +226,5 @@ def analyze_movie(movie_name):
 
 
 if __name__ == "__main__":
-
     movie = input("Enter movie name: ")
-
     print(analyze_movie(movie))
