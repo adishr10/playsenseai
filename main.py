@@ -12,7 +12,6 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 SUPABASE_URL = "https://etydbhaqznqfobltkopd.supabase.co"
 SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV0eWRiaGFxem5xZm9ibHRrb3BkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1ODgyNjUsImV4cCI6MjA4OTE2NDI2NX0.T0T4OBcN7tShEvaNj5Tf294W1QTHA_FTxwvbQWqRULw"
 
-
 client = Groq(api_key=GROQ_API_KEY)
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
@@ -70,26 +69,30 @@ def get_imdb_page(imdb_id):
 # ---------------- PROMPT ---------------- #
 
 system_prompt = """
-You extract important content warnings from IMDb parental guide text.
+You read IMDb parental guide text and convert it into SMART content tags.
 
 GOAL:
-Return only the most relevant and useful warnings.
+Understand the meaning, not just words.
 
 RULES:
-- ALWAYS include sexual content if present (sex, kissing, nudity, breasts, body exposure).
-- Extract strong visual content (violence, blood, death, weapons).
-- Extract substance use (drugs, alcohol, smoking).
-- Extract strong language (fuck, shit, etc).
+- ALWAYS include sexual content if present (SEX, KISSING, NUDITY, BREASTS, BUTTOCKS).
+- Extract strong violence (SHOOTING, STABBING, EXPLOSION, DEATH).
+- Extract substance use (DRUG USE, COCAINE, SMOKING, ALCOHOL).
+- Extract strong language (FUCK, SHIT, etc).
 
-- IGNORE weak or irrelevant items (cars, furniture, walking, etc).
-- Merge similar items (KILLING, KILLED → KILL).
-- Keywords must be 1–3 words, ALL CAPS.
+- Ignore irrelevant things (cars, furniture, generic actions).
+- Merge similar items (KILLED, KILLING → KILLING).
+- Tags must be 1–3 words, ALL CAPS.
 
 LIMIT:
-- Max 12 keywords.
+- Max 20 total tags across all categories.
 
 OUTPUT:
-{"keywords":[]}
+{
+  "Visual": [],
+  "Substance": [],
+  "Words": []
+}
 """
 
 
@@ -97,14 +100,14 @@ OUTPUT:
 
 def extract_keywords(text):
     if not text.strip():
-        return {"keywords": []}
+        return {"Visual": [], "Substance": [], "Words": []}
 
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
-        temperature=0.2,
+        temperature=0.3,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text}
+            {"role": "user", "content": text[:12000]}  # 🔥 limit tokens
         ]
     )
 
@@ -117,7 +120,7 @@ def extract_keywords(text):
         if match:
             return json.loads(match.group())
 
-    return {"keywords": []}
+    return {"Visual": [], "Substance": [], "Words": []}
 
 
 # ---------------- SCRAPE ---------------- #
@@ -130,55 +133,6 @@ def scrape_parental_guide(html):
     collected = [b.get_text(strip=True) for b in text_blocks]
 
     return "\n".join(collected)
-
-
-# ---------------- SPLIT ---------------- #
-
-def split_categories(text):
-    visual, substance, words = [], [], []
-
-    for line in text.split("\n"):
-        l = line.lower()
-
-        if any(x in l for x in [
-            "sex", "nudity", "violence", "blood", "kill", "fight"
-        ]):
-            visual.append(line)
-
-        elif any(x in l for x in [
-            "drink", "alcohol", "smoke", "drug"
-        ]):
-            substance.append(line)
-
-        elif any(x in l for x in [
-            "fuck", "shit", "bitch", "asshole"
-        ]):
-            words.append(line)
-
-    return "\n".join(visual), "\n".join(substance), "\n".join(words)
-
-
-# ---------------- SMART LIMIT ---------------- #
-
-PRIORITY = [
-    "SEX", "KISSING", "NUDITY", "BREAST", "BUTTOCKS",
-    "PUBIC", "SEXUAL"
-]
-
-
-def smart_limit(keywords, max_items=12):
-    keywords = list(dict.fromkeys(keywords))
-
-    priority_items = []
-    others = []
-
-    for k in keywords:
-        if any(p in k for p in PRIORITY):
-            priority_items.append(k)
-        else:
-            others.append(k)
-
-    return (priority_items + others)[:max_items]
 
 
 # ---------------- MAIN ---------------- #
@@ -197,21 +151,15 @@ def analyze_movie(movie_name):
     html = get_imdb_page(imdb_id)
     scraped_text = scrape_parental_guide(html)
 
-    # 🔥 reduce tokens
-    if len(scraped_text) > 12000:
-        scraped_text = scraped_text[:12000]
+    print("scraped chars:", len(scraped_text))
 
-    visual_text, substance_text, words_text = split_categories(scraped_text)
-
-    visual = extract_keywords(visual_text)
-    substance = extract_keywords(substance_text)
-    words = extract_keywords(words_text)
+    result_ai = extract_keywords(scraped_text)
 
     result = {
         "categories": {
-            "Visual": smart_limit(visual["keywords"]),
-            "Substance": smart_limit(substance["keywords"]),
-            "Words": smart_limit(words["keywords"])
+            "Visual": result_ai.get("Visual", []),
+            "Substance": result_ai.get("Substance", []),
+            "Words": result_ai.get("Words", [])
         }
     }
 
