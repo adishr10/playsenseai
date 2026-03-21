@@ -33,7 +33,7 @@ SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 def get_with_retry(url, params=None, retries=5):
     for i in range(retries):
         try:
-            r = session.get(url, params=params, headers=headers, timeout=15)
+            r = session.get(url, params=params, headers=headers, timeout=60)
             r.raise_for_status()
 
             if "api.themoviedb.org" in url:
@@ -67,7 +67,7 @@ def get_imdb_id(movie_name):
 
 def get_imdb_page(imdb_id):
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-    scraper_url = f"http://api.scraperapi.com?api_key=e936f885cae066239bb5f6ad990f9db0&url={url}&render=true"
+    scraper_url = f"http://api.scraperapi.com?api_key=e936f885cae066239bb5f6ad990f9db0&url={url}"
     return get_with_retry(scraper_url)
 
 
@@ -131,12 +131,11 @@ def extract_keywords(text):
 # ---------------- SCRAPE ---------------- #
 
 def scrape_parental_guide(html):
+    if not html:
+        return ""
     soup = bs(html, "html.parser")
-
     text_blocks = soup.find_all("div", class_="ipc-html-content-inner-div")
-
     collected = [b.get_text(strip=True) for b in text_blocks]
-
     return "\n".join(collected)
 
 
