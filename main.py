@@ -84,7 +84,7 @@ Understand the meaning, not just words.
 
 RULES:
 - ALWAYS include sexual content if present (SEX, KISSING, NUDITY, BREASTS, BUTTOCKS).
-- Extract strong violence (SHOOTING, STABBING, EXPLOSION, DEATH).
+-  strong violence (SHOOTING, STABBING, EXPLOSION, DEATH).
 - Extract substance use (DRUG USE, COCAINE, SMOKING, ALCOHOL).
 - Extract strong language (FUCK, SHIT, etc).
 
@@ -115,7 +115,7 @@ def extract_keywords(text):
         temperature=0.3,
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": text[:12000]}  # 🔥 limit tokens
+            {"role": "user", "content": text[:12000]}
         ]
     )
 
@@ -124,12 +124,16 @@ def extract_keywords(text):
     try:
         return json.loads(output)
     except:
-        match = re.search(r"\{.*\}", output, re.DOTALL)
+        pass
+
+    try:
+        match = re.search(r"\{[\s\S]*\}", output)
         if match:
             return json.loads(match.group())
+    except:
+        pass
 
     return {"Visual": [], "Substance": [], "Words": []}
-
 
 # ---------------- SCRAPE ---------------- #
 
