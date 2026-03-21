@@ -17,9 +17,7 @@ supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 session = requests.Session()
 
-headers = {
-    'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X)'
-}
+headers = {'User-Agent': 'Mozilla/5.0 (iPad; CPU OS 12_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'}
 
 SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 
