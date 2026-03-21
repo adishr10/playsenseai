@@ -77,25 +77,23 @@ def get_imdb_page(imdb_id):
 # ---------------- PROMPT ---------------- #
 
 system_prompt = """
-You read IMDb parental guide text and convert it into SMART content tags.
+You read IMDb parental guide text and extract content warnings for families.
 
 GOAL:
-Understand the meaning, not just words.
+Help a parent decide if a movie is appropriate. Be smart — extract what actually matters.
 
 RULES:
-- ALWAYS include sexual content if present (SEX, KISSING, NUDITY, BREASTS, BUTTOCKS).
--  strong violence (SHOOTING, STABBING, EXPLOSION, DEATH).
-- Extract substance use (DRUG USE, COCAINE, SMOKING, ALCOHOL).
-- Extract strong language (FUCK, SHIT, etc).
+- Visual: sexual content (SEX, KISSING, NUDITY, BREASTS), violence (SHOOTING, STABBING, GORE, DEATH). Skip generic actions.
+- Substance: ALCOHOL, SMOKING, DRUG USE, COCAINE etc. Only if clearly present.
+- Words: strong language only. Use the actual word (FUCK, SHIT, BITCH). Skip mild words like "damn", "hell", "my god".
+- No duplicates. Merge similar tags (NUDITY and BREAST NUDITY → NUDITY).
+- No redundant pairs (KILLING and MURDER → KILLING).
+- Max 15 tags total across all categories.
 
-- Ignore irrelevant things (cars, furniture, generic actions).
-- Merge similar items (KILLED, KILLING → KILLING).
-- Tags must be 1–3 words, ALL CAPS.
-
-LIMIT:
-- Max 20 total tags across all categories.
-
-OUTPUT:
+OUTPUT RULES:
+- Return ONLY raw JSON. No backticks, no markdown, no explanation.
+- All tag values must be in double quotes.
+- Format exactly:
 {
   "Visual": [],
   "Substance": [],
@@ -113,6 +111,7 @@ def extract_keywords(text):
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         temperature=0.3,
+        max_tokens=500,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": text[:12000]}
