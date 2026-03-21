@@ -13,6 +13,6 @@ app.add_middleware(
 )
 
 @app.get("/movie")
-def analyze(movie: str):
-    result = analyze_movie(movie)
+def analyze(name: str):
+    result = analyze_movie(name)
     return result
