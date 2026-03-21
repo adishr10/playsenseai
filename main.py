@@ -67,8 +67,11 @@ def get_imdb_id(movie_name):
 
 def get_imdb_page(imdb_id):
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-    scraper_url = f"http://api.scraperapi.com?api_key=e936f885cae066239bb5f6ad990f9db0&url={url}"
-    return get_with_retry(scraper_url)
+    scraper_url = f"http://api.scraperapi.com?api_key={os.getenv('SCRAPERAPI_KEY')}&url={url}"
+    result = get_with_retry(scraper_url)
+    print("SCRAPERAPI RESPONSE CHARS:", len(result) if result else 0)
+    print("SCRAPERAPI PREVIEW:", result[:500] if result else "NONE")
+    return result
 
 
 # ---------------- PROMPT ---------------- #
