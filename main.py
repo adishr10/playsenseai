@@ -67,7 +67,8 @@ def get_imdb_id(movie_name):
 
 def get_imdb_page(imdb_id):
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-    return get_with_retry(url)
+    scraper_url = f"http://api.scraperapi.com?api_key=e936f885cae066239bb5f6ad990f9db0&url={url}&render=true"
+    return get_with_retry(scraper_url)
 
 
 # ---------------- PROMPT ---------------- #
