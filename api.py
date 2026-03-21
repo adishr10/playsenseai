@@ -12,7 +12,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/analyze")
+@app.get("/movie")
 def analyze(movie: str):
     result = analyze_movie(movie)
     return result
