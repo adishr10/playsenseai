@@ -33,7 +33,7 @@ SEARCH_URL = "https://api.themoviedb.org/3/search/movie"
 def get_with_retry(url, params=None, retries=5):
     for i in range(retries):
         try:
-            r = session.get(url, params=params, headers=headers, timeout=60)
+            r = session.get(url, params=params, headers=headers, timeout=70)
             r.raise_for_status()
 
             if "api.themoviedb.org" in url:
@@ -67,7 +67,7 @@ def get_imdb_id(movie_name):
 
 def get_imdb_page(imdb_id):
     url = f"https://www.imdb.com/title/{imdb_id}/parentalguide/"
-    scraper_url = f"http://api.scraperapi.com?api_key={os.getenv('SCRAPERAPI_KEY')}&url={url}"
+    scraper_url = f"http://api.scraperapi.com?api_key={os.getenv('SCRAPERAPI_KEY')}&render=true&url={url}"
     result = get_with_retry(scraper_url)
     print("SCRAPERAPI RESPONSE CHARS:", len(result) if result else 0)
     print("SCRAPERAPI PREVIEW:", result[:500] if result else "NONE")
