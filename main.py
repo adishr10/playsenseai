@@ -133,6 +133,7 @@ def extract_keywords(text):
     except:
         pass
 
+    print("GROQ OUTPUT:", output[:500])
     return {"Visual": [], "Substance": [], "Words": []}
 
 # ---------------- SCRAPE ---------------- #
