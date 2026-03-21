@@ -86,7 +86,10 @@ RULES:
 - Visual: sexual content (SEX, KISSING, NUDITY, BREASTS), violence (SHOOTING, STABBING, GORE, DEATH). Skip generic actions.
 - Substance: ALCOHOL, SMOKING, DRUG USE, COCAINE etc. Only if clearly present.
 - Words: strong language only. Use the actual word (FUCK, SHIT, BITCH). Skip mild words like "damn", "hell", "my god".
-- No duplicates. Merge similar tags (NUDITY and BREAST NUDITY → NUDITY).
+- Extract only what is clearly present or strongly implied. 
+- Do not infer from vague references or mild innuendos.
+- Mild slapstick, cartoon violence, and subtle innuendos do NOT count as tags.
+- Only flag something if a parent would genuinely be concerned about it.
 - No redundant pairs (KILLING and MURDER → KILLING).
 - Max 15 tags total across all categories.
 
@@ -109,8 +112,8 @@ def extract_keywords(text):
         return {"Visual": [], "Substance": [], "Words": []}
 
     response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        temperature=0.3,
+        model="llama-3.1-8b-instant",
+        temperature=0.1,
         max_tokens=500,
         messages=[
             {"role": "system", "content": system_prompt},
