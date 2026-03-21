@@ -89,6 +89,11 @@ RULES:
 - Extract only what is clearly present or strongly implied. 
 - Do not infer from vague references or mild innuendos.
 - Mild slapstick, cartoon violence, and subtle innuendos do NOT count as tags.
+- Tags must be 1-3 words MAXIMUM. Never full sentences.
+- BAD: "nude female prostitute bathing in a tub with left breast visible"
+- GOOD: "NUDITY", "BREASTS"
+- BAD: "man killed with an axe offscreen with blood spraying on the killer's face"  
+- GOOD: "AXE KILLING"
 - Only flag something if a parent would genuinely be concerned about it.
 - No redundant pairs (KILLING and MURDER → KILLING).
 - Max 15 tags total across all categories.
